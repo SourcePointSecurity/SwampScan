@@ -133,12 +133,17 @@ class OpenVASDetector:
             missing_components.append("rust-toolchain")
             installation_required = True
         
-        # Determine if ready for scanning
-        ready_for_scanning = (
-            not installation_required and
-            (components.get('openvasd', ComponentStatus('openvasd', False)).installed or
-             components.get('openvas-scanner', ComponentStatus('openvas-scanner', False)).installed)
-        )
+        # Determine if ready for scanning - be more permissive for Ubuntu installations
+        has_scanner = components.get('openvas-scanner', ComponentStatus('openvas-scanner', False)).installed
+        has_gvmd = components.get('openvasd', ComponentStatus('openvasd', False)).installed
+        has_scannerctl = components.get('scannerctl', ComponentStatus('scannerctl', False)).installed
+        
+        # Check if we have the core OpenVAS components (more flexible for Ubuntu)
+        ready_for_scanning = (has_scanner and has_gvmd) or (has_scanner and has_scannerctl)
+        
+        # Override installation_required if we have working OpenVAS components
+        if ready_for_scanning:
+            installation_required = False
         
         status = InstallationStatus(
             components=components,

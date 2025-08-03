@@ -1,0 +1,121 @@
+# SwampScan OpenVAS Configuration
+# This file documents the required OpenVAS/GVM configuration for SwampScan
+
+openvas:
+  # System requirements
+  system_dependencies:
+    - gcc
+    - cmake
+    - pkg-config
+    - redis-server
+    - git
+    - curl
+    - make
+    - postgresql
+    - postgresql-contrib
+    - postgresql-server-dev-all
+    
+  # Development libraries
+  dev_libraries:
+    - libgpgme-dev
+    - libksba-dev
+    - libgnutls28-dev
+    - libgcrypt-dev
+    - libpcap-dev
+    - libglib2.0-dev
+    - libjson-glib-dev
+    - libssh-dev
+    - libcurl4-gnutls-dev
+    - python3-dev
+    
+  # OpenVAS/GVM packages
+  gvm_packages:
+    - gvm
+    - openvas-scanner
+    - ospd-openvas
+    - gvmd
+    - greenbone-security-assistant
+    - python3-gvm
+    
+  # Required services
+  services:
+    - redis-server
+    - postgresql
+    - gvmd
+    - ospd-openvas
+    
+  # Binary paths and compatibility links
+  binary_paths:
+    openvas_scanner: /usr/sbin/openvas
+    gvmd: /usr/sbin/gvmd
+    gvm_cli: /usr/bin/gvm-cli
+    
+  # SwampScan compatibility links
+  compatibility_links:
+    openvas-scanner: /usr/local/bin/openvas-scanner
+    openvasd: /usr/local/bin/openvasd
+    scannerctl: /usr/local/bin/scannerctl
+    
+  # Database configuration
+  database:
+    name: gvmd
+    user: _gvm
+    extensions:
+      - uuid-ossp
+      - pgcrypto
+    admin_user: admin
+    admin_password: admin
+    
+  # Directory structure
+  directories:
+    data: /var/lib/gvm
+    logs: /var/log/gvm
+    run: /run/gvmd
+    ospd_run: /run/ospd
+    
+  # Library configuration
+  library_paths:
+    - /usr/lib64
+    
+  # Feed synchronization
+  feeds:
+    nvt: greenbone-nvt-sync
+    scap: greenbone-feed-sync --type SCAP
+    cert: greenbone-feed-sync --type CERT
+    
+# SwampScan specific configuration
+swampscan:
+  # Validation settings
+  validation:
+    strict_mode: false
+    ubuntu_compatibility: true
+    
+  # Scanner settings
+  scanner:
+    default_timeout: 3600
+    max_concurrent: 1
+    
+  # Port configurations
+  port_presets:
+    top10: [21, 22, 23, 25, 53, 80, 110, 443, 993, 995]
+    top100: "1-100"
+    web: [80, 443, 8080, 8443, 8000, 8888]
+    all: "1-65535"
+    
+  # Output settings
+  output:
+    default_format: csv
+    include_headers: true
+    
+# Installation verification
+verification:
+  commands:
+    - swampscan --check-installation
+    - swampscan --version
+    - systemctl status redis-server gvmd
+    
+  expected_results:
+    - "System is ready for vulnerability scanning"
+    - "SwampScan version"
+    - "active (running)"
+
