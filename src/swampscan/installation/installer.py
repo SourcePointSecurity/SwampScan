@@ -189,7 +189,7 @@ class OpenVASInstaller:
         
         # Install packages
         try:
-            if distro in ['debian', 'ubuntu']:
+            if distro in ['debian', 'ubuntu', 'kali']:
                 # Update package list first
                 self._run_command(['sudo', 'apt-get', 'update'], "Updating package list")
                 
