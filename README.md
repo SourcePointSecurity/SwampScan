@@ -76,13 +76,164 @@ swampscan 192.168.1.1 -p web -o results.csv
 
 Watch SwampScan in action with our comprehensive installation and usage demonstration:
 
-[![SwampScan Demo Video](https://img.youtube.com/vi/DEMO_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=DEMO_VIDEO_ID)
+```
+🐊 SwampScan Live Demo - Coming Soon! 🎬
+═══════════════════════════════════════
 
-*Click the image above to watch the full demo video showing installation on Kali Linux and real vulnerability scanning*
+📹 Professional demo video in production
+🎯 Complete installation walkthrough
+🔍 Real vulnerability scanning examples
+📊 All output formats demonstrated
 
-### 📺 What You'll See in the Demo
+Meanwhile, try the interactive demo below! ⬇️
+```
 
-The demo video covers:
+### 🚀 Interactive Demo - Try It Now!
+
+**Step 1: Quick Installation**
+```bash
+git clone https://github.com/SourcePointSecurity/SwampScan.git
+cd SwampScan && pip3 install -e .
+```
+
+**Step 2: Check System Status**
+```bash
+swampscan --check-installation
+# Shows what components need to be installed
+```
+
+**Step 3: Install Components**
+```bash
+swampscan --install --non-interactive
+# Automatically installs OpenVAS and dependencies
+```
+
+**Step 4: Run Your First Scan**
+```bash
+swampscan 127.0.0.1 -p web -o demo_results.csv
+# Scans localhost web ports and saves to CSV
+```
+
+### 📱 Quick Demo on Mobile/Web
+
+Can't install right now? **View our sample outputs**:
+- 📊 [**CSV Results**](examples/sample_scan_results.csv) - Spreadsheet format
+- 📄 [**Text Report**](examples/sample_scan_results.txt) - Professional report  
+- 🔗 [**JSON Data**](examples/sample_scan_results.json) - API format
+
+### 🎥 Demo Video Coming Soon
+
+We're creating a comprehensive demo video that will show:
+- ✅ Complete installation on Kali Linux
+- ✅ Real vulnerability scanning in action  
+- ✅ All output formats explained
+- ✅ Troubleshooting common issues
+
+**Want to be notified when it's ready?** ⭐ Star this repository!
+
+### 🖥️ Visual Demo Preview
+
+```
+$ swampscan 192.168.1.100 -p web -o results.csv
+
+Starting SwampScan v1.0.2...
+🐊 Lurking in the digital swamp, hunting vulnerabilities...
+
+Target: 192.168.1.100
+Ports: web (80,443,8080,8443)
+Output: results.csv
+
+[████████████████████████████████████████] 100%
+
+Scan Complete! 🎯
+┌─────────────────────────────────────────┐
+│ 📊 VULNERABILITY SUMMARY                │
+├─────────────────────────────────────────┤
+│ 🔴 Critical: 1 finding                 │
+│ 🟠 High:     2 findings                │
+│ 🟡 Medium:   1 finding                 │
+│ 🟢 Low:      1 finding                 │
+└─────────────────────────────────────────┘
+
+Results saved to: results.csv
+View with: cat results.csv
+```
+
+### 🎯 What SwampScan Finds
+
+```
+🔍 REAL VULNERABILITY EXAMPLES:
+
+🔴 CRITICAL: MySQL Default Configuration (CVSS 9.8)
+   └─ Anonymous database access enabled
+   └─ Fix: Run mysql_secure_installation
+
+🟠 HIGH: SSL/TLS Weak Ciphers (CVSS 7.5)  
+   └─ Vulnerable encryption protocols
+   └─ Fix: Update SSL configuration
+
+🟡 MEDIUM: SSH Weak Algorithms (CVSS 5.3)
+   └─ Deprecated key exchange methods
+   └─ Fix: Update SSH config
+
+🟢 LOW: Version Information Disclosure (CVSS 2.7)
+   └─ Server version exposed in headers
+   └─ Fix: Hide version information
+```
+
+### 📺 Complete Getting Started Guide
+
+**Can't wait for the video? Follow this step-by-step guide:**
+
+#### 🔧 Installation (2 minutes)
+```bash
+# 1. Clone repository
+git clone https://github.com/SourcePointSecurity/SwampScan.git
+cd SwampScan
+
+# 2. Install SwampScan  
+pip3 install -e .
+
+# 3. Verify installation
+swampscan --version
+```
+
+#### 🛠️ Setup OpenVAS (5-10 minutes)
+```bash
+# 1. Check what's needed
+swampscan --check-installation
+
+# 2. Install everything automatically
+swampscan --install --non-interactive
+
+# 3. Verify setup complete
+swampscan --check-installation
+```
+
+#### 🎯 Your First Scan (1 minute)
+```bash
+# Scan localhost web services
+swampscan 127.0.0.1 -p web -o my_first_scan.csv
+
+# View results
+cat my_first_scan.csv
+```
+
+#### 🚀 Advanced Usage
+```bash
+# Network range scan
+swampscan 192.168.1.0/24 -p top100 --verbose
+
+# Professional report
+swampscan -f targets.txt -p ssh,web,database \
+  --scan-name "Security Assessment" \
+  -F txt -o security_report.txt
+
+# API integration format  
+swampscan 192.168.1.100 -p web -F json -o api_data.json
+```
+
+The demo video will cover:
 - **Complete Installation**: Step-by-step setup on Kali Linux including dependency resolution
 - **OpenVAS Integration**: Automatic installation and configuration of OpenVAS components
 - **Real Scanning**: Live vulnerability assessment with actual results
