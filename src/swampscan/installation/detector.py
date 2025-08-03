@@ -133,17 +133,36 @@ class OpenVASDetector:
             missing_components.append("rust-toolchain")
             installation_required = True
         
-        # Determine if ready for scanning - be more permissive for Ubuntu installations
+        # Determine if ready for scanning - be more permissive and informative
         has_scanner = components.get('openvas-scanner', ComponentStatus('openvas-scanner', False)).installed
         has_gvmd = components.get('openvasd', ComponentStatus('openvasd', False)).installed
         has_scannerctl = components.get('scannerctl', ComponentStatus('scannerctl', False)).installed
         
-        # Check if we have the core OpenVAS components (more flexible for Ubuntu)
+        # Check if we have the core OpenVAS components (flexible for different installations)
         ready_for_scanning = (has_scanner and has_gvmd) or (has_scanner and has_scannerctl)
         
+        # If not ready, check if we can provide helpful guidance
+        if not ready_for_scanning:
+            # Check if this might be a partial installation that can be completed
+            has_some_components = has_scanner or has_gvmd or has_scannerctl
+            has_rust = rust_status.installed
+            has_basic_deps = all(
+                system_deps.get(dep, ComponentStatus(dep, False)).installed 
+                for dep in ['gcc', 'cmake', 'pkg-config']
+            )
+            
+            if has_some_components or (has_rust and has_basic_deps):
+                # Reduce installation_required if we have some components
+                self.logger.info("Partial OpenVAS installation detected - may only need component completion")
+                
         # Override installation_required if we have working OpenVAS components
         if ready_for_scanning:
             installation_required = False
+            self.logger.info("OpenVAS components detected and ready for scanning")
+        elif not installation_required:
+            # If we don't have components but also don't think installation is required,
+            # we should probably require installation
+            installation_required = True
         
         status = InstallationStatus(
             components=components,
@@ -386,6 +405,36 @@ class OpenVASDetector:
             lines.append("Missing Components:")
             for component in status.missing_components:
                 lines.append(f"  ❌ {component}")
+            
+            # Add helpful next steps
+            lines.append("")
+            lines.append("📋 Next Steps:")
+            if "rust-toolchain" in status.missing_components:
+                lines.append("  1. Install Rust toolchain:")
+                lines.append("     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh")
+                lines.append("     source ~/.cargo/env")
+            
+            if any("system-" in comp for comp in status.missing_components):
+                lines.append("  2. Install missing system dependencies:")
+                lines.append("     sudo apt-get update && sudo apt-get install -y \\")
+                missing_sys_deps = [comp.replace("system-", "") for comp in status.missing_components if comp.startswith("system-")]
+                if "dev-libraries" in [comp.name for comp in status.system_dependencies.values() if not comp.installed]:
+                    lines.append("       libgpgme-dev libksba-dev libgnutls28-dev libgcrypt-dev \\")
+                    lines.append("       libpcap-dev libglib2.0-dev libjson-glib-dev libssh-dev")
+                for dep in missing_sys_deps:
+                    if dep != "dev-libraries":
+                        lines.append(f"       {dep}")
+            
+            if any(comp in status.missing_components for comp in ["openvas-scanner", "openvasd", "scannerctl"]):
+                lines.append("  3. Complete OpenVAS installation:")
+                lines.append("     swampscan --install --non-interactive")
+                lines.append("     OR run the enhanced installation script:")
+                lines.append("     ./scripts/install_swampscan.sh")
+        
+        elif not status.ready_for_scanning:
+            lines.append("")
+            lines.append("📋 Installation appears complete but components may need configuration.")
+            lines.append("Try running: swampscan --install --non-interactive")
         
         return "\n".join(lines)
 

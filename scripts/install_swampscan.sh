@@ -37,31 +37,70 @@ check_root() {
     fi
 }
 
-# Check Ubuntu version
-check_ubuntu() {
-    if ! grep -q "Ubuntu" /etc/os-release; then
-        log_warning "This script is designed for Ubuntu. Other distributions may require modifications."
+# Check system compatibility
+check_system() {
+    if grep -q "Ubuntu" /etc/os-release; then
+        local version=$(lsb_release -rs 2>/dev/null || echo "Unknown")
+        log_info "Detected Ubuntu version: $version"
+    elif grep -q "Debian" /etc/os-release; then
+        local version=$(lsb_release -rs 2>/dev/null || echo "Unknown")
+        log_info "Detected Debian-based system: $version"
+    elif command -v apt-get &> /dev/null; then
+        log_info "Detected Debian-based system (using apt package manager)"
+    else
+        log_warning "This script is designed for Ubuntu/Debian systems. Other distributions may require modifications."
+        log_info "Continuing with installation..."
     fi
-    
-    local version=$(lsb_release -rs)
-    log_info "Detected Ubuntu version: $version"
 }
 
 # Install system dependencies
 install_system_deps() {
     log_info "Installing system dependencies..."
     
+    # Update package lists first
     sudo apt-get update
     
-    local packages=(
-        gcc cmake pkg-config redis-server git curl make
-        postgresql postgresql-contrib postgresql-server-dev-all
-        libgpgme-dev libksba-dev libgnutls28-dev libgcrypt-dev
-        libpcap-dev libglib2.0-dev libjson-glib-dev libssh-dev
-        libcurl4-gnutls-dev python3-pip python3-dev python3-venv
+    # Core build tools and system packages
+    local core_packages=(
+        gcc cmake pkg-config make git curl wget
+        build-essential autoconf automake libtool
+        python3-pip python3-dev python3-venv
     )
     
-    sudo apt-get install -y "${packages[@]}"
+    # Database and service packages
+    local service_packages=(
+        redis-server postgresql postgresql-contrib 
+        postgresql-server-dev-all
+    )
+    
+    # Development libraries (the key missing ones from the report)
+    local dev_libraries=(
+        libgpgme-dev libksba-dev libgnutls28-dev libgcrypt-dev
+        libpcap-dev libglib2.0-dev libjson-glib-dev libssh-dev
+        libcurl4-gnutls-dev libxml2-dev libxslt1-dev
+        libkrb5-dev libldap2-dev libradcli-dev
+        libpq-dev libssl-dev libffi-dev
+    )
+    
+    # Install packages in groups for better error handling
+    log_info "Installing core build tools..."
+    sudo apt-get install -y "${core_packages[@]}" || {
+        log_error "Failed to install core packages"
+        return 1
+    }
+    
+    log_info "Installing service packages..."
+    sudo apt-get install -y "${service_packages[@]}" || {
+        log_error "Failed to install service packages"
+        return 1
+    }
+    
+    log_info "Installing development libraries..."
+    sudo apt-get install -y "${dev_libraries[@]}" || {
+        log_error "Failed to install development libraries"
+        return 1
+    }
+    
     log_success "System dependencies installed"
 }
 
@@ -69,24 +108,70 @@ install_system_deps() {
 install_openvas() {
     log_info "Installing OpenVAS/GVM packages..."
     
+    # Check if packages are available before installing
+    local available_packages=()
     local gvm_packages=(
         gvm openvas-scanner ospd-openvas gvmd
-        greenbone-security-assistant python3-gvm
+        python3-gvm
     )
     
-    sudo apt-get install -y "${gvm_packages[@]}"
-    log_success "OpenVAS/GVM packages installed"
+    # Check each package availability
+    for pkg in "${gvm_packages[@]}"; do
+        if apt-cache show "$pkg" &>/dev/null; then
+            available_packages+=("$pkg")
+            log_info "Package $pkg is available"
+        else
+            log_warning "Package $pkg is not available in repositories"
+        fi
+    done
+    
+    if [ ${#available_packages[@]} -eq 0 ]; then
+        log_warning "No OpenVAS packages available in repositories"
+        log_info "This may be normal - OpenVAS components will be built from source"
+        return 0
+    fi
+    
+    # Install available packages
+    log_info "Installing available OpenVAS packages: ${available_packages[*]}"
+    sudo apt-get install -y "${available_packages[@]}" || {
+        log_warning "Some OpenVAS packages failed to install - will build from source"
+        return 0
+    }
+    
+    log_success "Available OpenVAS/GVM packages installed"
 }
 
 # Install Rust toolchain
 install_rust() {
     if ! command -v rustc &> /dev/null; then
         log_info "Installing Rust toolchain..."
+        
+        # Download and install Rust
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
-        log_success "Rust toolchain installed"
+        
+        # Source Rust environment for current session
+        if [[ -f "$HOME/.cargo/env" ]]; then
+            source "$HOME/.cargo/env"
+            log_info "Rust environment sourced for current session"
+        fi
+        
+        # Add to shell profile for future sessions
+        if [[ -f "$HOME/.bashrc" ]] && ! grep -q "/.cargo/env" "$HOME/.bashrc"; then
+            echo 'source "$HOME/.cargo/env"' >> "$HOME/.bashrc"
+            log_info "Added Rust to .bashrc for future sessions"
+        fi
+        
+        # Verify installation
+        if command -v rustc &> /dev/null; then
+            local rust_version=$(rustc --version)
+            log_success "Rust toolchain installed: $rust_version"
+        else
+            log_error "Rust installation failed - rustc not found"
+            return 1
+        fi
     else
-        log_info "Rust toolchain already installed"
+        local rust_version=$(rustc --version)
+        log_info "Rust toolchain already installed: $rust_version"
     fi
 }
 
@@ -256,7 +341,7 @@ main() {
     echo ""
     
     check_root
-    check_ubuntu
+    check_system
     
     log_info "Starting installation process..."
     
