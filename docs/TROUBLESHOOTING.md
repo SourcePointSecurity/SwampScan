@@ -1,351 +1,393 @@
 # SwampScan Troubleshooting Guide
 
-This guide covers common issues and solutions for SwampScan installation and operation, particularly with Ubuntu OpenVAS/GVM integration.
+This guide provides solutions to common issues encountered when installing and configuring SwampScan with OpenVAS.
 
-## 🚨 Common Installation Issues
+## Table of Contents
 
-### 1. "System requires additional setup" Error
+1. [Installation Issues](#installation-issues)
+2. [OpenVAS Configuration Problems](#openvas-configuration-problems)
+3. [Service Detection Issues](#service-detection-issues)
+4. [Scanning Problems](#scanning-problems)
+5. [Feed Synchronization Issues](#feed-synchronization-issues)
+6. [Permission Problems](#permission-problems)
+7. [Network and Connectivity Issues](#network-and-connectivity-issues)
 
-**Symptoms:**
-```
-❌ System requires additional setup.
-Run with --install to automatically install missing components.
-```
+## Installation Issues
 
-**Cause:** SwampScan's validation logic is too strict for Ubuntu package-based OpenVAS installations.
-
-**Solution:** This has been fixed in the latest version. The validation logic now properly recognizes Ubuntu OpenVAS installations.
-
-**Manual Fix (if needed):**
-```bash
-# Ensure symbolic links exist
-sudo ln -sf /usr/sbin/openvas /usr/local/bin/openvas-scanner
-sudo ln -sf /usr/sbin/gvmd /usr/local/bin/openvasd  
-sudo ln -sf /usr/bin/gvm-cli /usr/local/bin/scannerctl
-```
-
-### 2. "Missing libraries: libgpgme, libksba" Warning
+### Issue: "Unsupported distribution" on Kali Linux
 
 **Symptoms:**
-```
-❌ dev-libraries
-    ⚠️  Missing libraries: libgpgme, libksba
-```
-
-**Cause:** Development libraries not installed or not detected by pkg-config.
+- Installer reports "Unsupported distribution"
+- Package manager commands fail
 
 **Solution:**
 ```bash
-sudo apt-get install -y libgpgme-dev libksba-dev libgnutls28-dev
+# Ensure the installer correctly identifies Kali as Debian-based
+sudo apt-get update
+sudo apt-get install -y lsb-release
+
+# If dpkg was interrupted, fix it first
+sudo dpkg --configure -a
+sudo apt-get update
+sudo apt-get -f install
+
+# Then retry installation
+./scripts/install_swampscan.sh
 ```
 
-### 3. OpenVAS Scanner Library Issues
+### Issue: Missing Development Libraries
 
 **Symptoms:**
-```
-/usr/sbin/openvas: error while loading shared libraries
-```
-
-**Cause:** Library path not configured for OpenVAS scanner.
+- Compilation errors during OpenVAS build
+- "dev-libraries" marked as missing
 
 **Solution:**
 ```bash
-# Add library path
-echo "/usr/lib64" | sudo tee /etc/ld.so.conf.d/openvas.conf
-sudo ldconfig
-
-# Verify fix
-/usr/sbin/openvas --help
+# Install all required development libraries
+sudo apt-get update && sudo apt-get install -y \
+  cmake \
+  libglib2.0-dev \
+  libjson-glib-dev \
+  libpcap-dev \
+  libgcrypt-dev \
+  libgpgme-dev \
+  libssh-dev \
+  libksba-dev \
+  libgnutls28-dev \
+  libcurl4-gnutls-dev \
+  libxml2-dev \
+  pkg-config \
+  gcc \
+  make
 ```
 
-## 🔧 Service Configuration Issues
-
-### 1. GVM Services Not Starting
+### Issue: Rust Toolchain Installation Fails
 
 **Symptoms:**
-```
-● gvmd.service - failed to start
-● ospd-openvas.service - failed to start
-```
+- Rust components fail to build
+- `cargo` command not found
 
-**Diagnosis:**
+**Solution:**
 ```bash
-# Check service status
-sudo systemctl status gvmd ospd-openvas redis-server
+# Install Rust toolchain manually
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
 
-# Check logs
-sudo journalctl -u gvmd --no-pager -n 20
-sudo journalctl -u ospd-openvas --no-pager -n 20
+# Verify installation
+rustc --version
+cargo --version
+
+# Retry SwampScan installation
+./scripts/install_swampscan.sh
 ```
 
-**Solutions:**
+## OpenVAS Configuration Problems
 
-**PostgreSQL Database Issues:**
+### Issue: OpenVAS Services Not Starting
+
+**Symptoms:**
+- `systemctl start gvmd` fails
+- `systemctl start ospd-openvas` fails
+- Services show "failed" status
+
+**Solution:**
+```bash
+# Check service status and logs
+sudo systemctl status gvmd
+sudo journalctl -xeu gvmd
+
+# Fix common issues
+sudo chown -R gvm:gvm /var/lib/gvm
+sudo chown -R gvm:gvm /var/log/gvm
+sudo mkdir -p /run/gvmd
+sudo chown -R gvm:gvm /run/gvmd
+
+# Restart services
+sudo systemctl restart postgresql
+sudo systemctl restart redis-server
+sudo systemctl restart gvmd
+```
+
+### Issue: Database Connection Problems
+
+**Symptoms:**
+- "Database connection failed" errors
+- GVM database not accessible
+
+**Solution:**
 ```bash
 # Ensure PostgreSQL is running
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 
-# Recreate database if needed
-sudo -u postgres dropdb gvmd
-sudo -u postgres createdb gvmd
-sudo -u postgres psql gvmd -c "create extension \"uuid-ossp\";"
-sudo -u postgres psql gvmd -c "create extension \"pgcrypto\";"
+# Create/recreate GVM database
+sudo -u postgres dropdb gvmd 2>/dev/null || true
+sudo -u postgres dropuser gvm 2>/dev/null || true
+sudo -u postgres createuser -DRS gvm
+sudo -u postgres createdb -O gvm gvmd
+
+# Test database connection
+sudo -u gvm psql gvmd -c "SELECT version();"
 ```
 
-**Permission Issues:**
+## Service Detection Issues
+
+### Issue: SwampScan Reports "OpenVAS not ready"
+
+**Symptoms:**
+- `swampscan --check-installation` shows missing components
+- Components exist but not detected
+
+**Root Cause:**
+The installation detector uses incorrect command flags for newer OpenVAS components.
+
+**Solution:**
+This has been fixed in the updated detector. The new version:
+- Uses `openvas-scanner --version` (correct binary name)
+- Uses `openvasd --help` instead of `--version` (not supported)
+- Uses `scannerctl --help` instead of `--version` (not supported)
+- Marks components as available if binary exists, even if command test fails
+
+### Issue: "Command failed" for openvasd/scannerctl
+
+**Symptoms:**
+- `openvasd --version` returns error
+- `scannerctl --version` returns error
+
+**Explanation:**
+These newer Rust-based tools don't support the `--version` flag in the same way as older tools.
+
+**Verification:**
 ```bash
-# Fix ownership
-sudo chown -R _gvm:_gvm /var/lib/gvm /var/log/gvm /run/gvmd /run/ospd
+# Test the correct commands
+openvasd --help
+scannerctl --help
+
+# These should work and show help output
+```
+
+## Scanning Problems
+
+### Issue: "No vulnerability tests loaded"
+
+**Symptoms:**
+- Scans return empty results
+- VTS endpoint returns empty array
+- "feeds still syncing" message
+
+**Solution:**
+```bash
+# Complete feed synchronization
+sudo -u gvm greenbone-feed-sync --type GVMD_DATA
+sudo -u gvm greenbone-feed-sync --type SCAP
+sudo -u gvm greenbone-feed-sync --type CERT
+sudo -u gvm greenbone-nvt-sync
+
+# This may take 30-60 minutes for initial sync
+# Monitor progress:
+tail -f /var/log/gvm/gvmd.log
+```
+
+### Issue: OpenVAS Daemon Not Responding
+
+**Symptoms:**
+- Connection refused to port 3000
+- API endpoints not accessible
+
+**Solution:**
+```bash
+# Check if openvasd is running
+ps aux | grep openvasd
+
+# Start openvasd manually if needed
+/home/ubuntu/.cargo/bin/openvasd --listening 127.0.0.1:3000 &
+
+# Test connectivity
+curl -s http://127.0.0.1:3000/health
+```
+
+## Feed Synchronization Issues
+
+### Issue: Feed Sync Permission Denied
+
+**Symptoms:**
+- "Permission denied" when syncing feeds
+- Cannot create lock files
+
+**Solution:**
+```bash
+# Fix ownership of OpenVAS directories
+sudo chown -R gvm:gvm /var/lib/openvas
+sudo chown -R gvm:gvm /var/lib/gvm
+sudo chown -R gvm:gvm /var/log/gvm
+
+# Retry feed sync
+sudo -u gvm greenbone-nvt-sync
+```
+
+### Issue: Feed Sync Takes Too Long
+
+**Symptoms:**
+- Sync appears to hang
+- Very slow download speeds
+
+**Solution:**
+```bash
+# Use rsync with verbose output to monitor progress
+sudo -u gvm greenbone-nvt-sync --verbose
+
+# For faster sync, ensure good internet connection
+# Initial sync downloads ~2GB of vulnerability data
+```
+
+## Permission Problems
+
+### Issue: GVM User Permission Errors
+
+**Symptoms:**
+- "Permission denied" for GVM operations
+- Cannot access GVM directories
+
+**Solution:**
+```bash
+# Ensure GVM user exists and has correct permissions
+sudo useradd -r -M -U -G sudo -s /usr/sbin/nologin gvm 2>/dev/null || true
+sudo usermod -aG gvm $USER
+
+# Fix directory permissions
+sudo chown -R gvm:gvm /var/lib/gvm
+sudo chown -R gvm:gvm /var/lib/openvas
+sudo chown -R gvm:gvm /var/log/gvm
+sudo chown -R gvm:gvm /run/gvmd
 
 # Create missing directories
-sudo mkdir -p /var/lib/gvm /var/log/gvm /run/gvmd /run/ospd
+sudo mkdir -p /var/lib/gvm
+sudo mkdir -p /var/lib/openvas
+sudo mkdir -p /var/log/gvm
+sudo mkdir -p /run/gvmd
 ```
 
-**Feed Synchronization:**
-```bash
-# Download vulnerability feeds
-sudo -u _gvm greenbone-nvt-sync
-sudo -u _gvm greenbone-feed-sync --type SCAP
-sudo -u _gvm greenbone-feed-sync --type CERT
-```
+## Network and Connectivity Issues
 
-### 2. Socket Connection Issues
+### Issue: Cannot Connect to Feed Servers
 
 **Symptoms:**
-```
-Socket /var/run/gvm/gvmd.sock does not exist
-```
+- Feed sync fails with connection errors
+- "Unable to connect to feed server"
 
 **Solution:**
 ```bash
-# Restart GVM services
-sudo systemctl restart gvmd
-sudo systemctl restart ospd-openvas
+# Test connectivity to Greenbone feed server
+curl -I http://feed.community.greenbone.net/
 
-# Wait for socket creation
-sleep 5
+# If behind firewall, ensure these are allowed:
+# - HTTP/HTTPS outbound connections
+# - rsync protocol (port 873)
 
-# Verify socket exists
-ls -la /var/run/gvm/gvmd.sock
+# Alternative: Use HTTP-based feed sync
+export GREENBONE_FEED_SYNC_METHOD=http
+sudo -u gvm greenbone-feed-sync --type GVMD_DATA
 ```
 
-### 3. Authentication Failures
+### Issue: Scanner Cannot Reach Targets
 
 **Symptoms:**
-```
-GVM authentication failed
-```
+- Scans fail with "Host unreachable"
+- Network timeouts during scanning
 
 **Solution:**
 ```bash
-# Create/reset admin user
-sudo -u _gvm gvmd --create-user=admin --password=admin
+# Test basic connectivity
+ping scanme.nmap.org
+nmap -p 80,443 scanme.nmap.org
 
-# Or modify existing user
-sudo -u _gvm gvmd --user=admin --new-password=admin
+# Check firewall rules
+sudo iptables -L
+sudo ufw status
+
+# Ensure scanner has network access
+sudo setcap cap_net_raw+ep /usr/local/bin/openvas-scanner
 ```
 
-## 🐛 Scanning Issues
+## Advanced Troubleshooting
 
-### 1. "No valid IP addresses found in targets"
+### Debug Mode
 
-**Symptoms:**
-```
-Scan execution failed: No valid IP addresses found in targets
-```
+Enable debug logging for detailed troubleshooting:
 
-**Cause:** Target parsing issue with comma-separated targets.
-
-**Solution:**
 ```bash
-# Use individual scans instead of comma-separated
-swampscan target1.com -p 80
-swampscan target2.com -p 80
-
-# Or use file-based targets
-echo -e "target1.com\ntarget2.com" > targets.txt
-swampscan -f targets.txt -p 80
-```
-
-### 2. "Invalid port" Errors
-
-**Symptoms:**
-```
-Invalid port 'ssh': invalid literal for int() with base 10: 'ssh'
-```
-
-**Cause:** Port name not recognized by port parser.
-
-**Solution:**
-```bash
-# Use numeric ports
-swampscan target.com -p 22,80,443
-
-# Or use predefined port sets
-swampscan target.com -p top100
-swampscan target.com -p web
-```
-
-### 3. Scan Timeouts
-
-**Symptoms:**
-```
-Scan timed out after 1 hour
-```
-
-**Solutions:**
-```bash
-# Reduce port range
-swampscan target.com -p top100
-
-# Use faster scan methods
-swampscan target.com -p 80,443 --timeout 300
-```
-
-## 🔍 Diagnostic Commands
-
-### System Status Check
-```bash
-# Check SwampScan installation
+# Enable debug logging for SwampScan
+export SWAMPSCAN_DEBUG=1
 swampscan --check-installation
 
-# Check OpenVAS components
-sudo gvm-check-setup
-
-# Verify services
-sudo systemctl status redis-server gvmd ospd-openvas
+# Enable debug logging for OpenVAS
+sudo -u gvm gvmd --foreground --listen=127.0.0.1 --port=9390 --verbose
 ```
 
-### Service Management
+### Manual Component Testing
+
+Test individual components:
+
 ```bash
-# Start all services
-sudo gvm-start
+# Test OpenVAS scanner directly
+echo "127.0.0.1" > /tmp/targets.txt
+/usr/local/bin/openvas-scanner --target-file /tmp/targets.txt
 
-# Stop all services  
-sudo gvm-stop
+# Test openvasd API
+curl -X GET http://127.0.0.1:3000/vts
 
-# Restart individual services
-sudo systemctl restart gvmd
-sudo systemctl restart ospd-openvas
-sudo systemctl restart redis-server
+# Test database connectivity
+sudo -u gvm psql gvmd -c "SELECT COUNT(*) FROM users;"
 ```
 
-### Log Analysis
-```bash
-# GVM daemon logs
-sudo journalctl -u gvmd --follow
+### Log File Locations
 
-# OpenVAS scanner logs
-sudo journalctl -u ospd-openvas --follow
+Check these log files for detailed error information:
 
-# SwampScan logs (if verbose mode)
-swampscan target.com -p 80 --verbose
-```
+- SwampScan logs: `~/.swampscan/logs/`
+- GVM logs: `/var/log/gvm/gvmd.log`
+- OpenVAS logs: `/var/log/gvm/openvas.log`
+- System logs: `journalctl -xeu gvmd`
 
-## 🛠️ Manual Recovery Procedures
+## Getting Help
 
-### Complete OpenVAS Reset
-```bash
-# Stop all services
-sudo gvm-stop
+If you continue to experience issues:
 
-# Remove data (CAUTION: This deletes all scan data)
-sudo rm -rf /var/lib/gvm/*
+1. Check the [GitHub Issues](https://github.com/SourcePointSecurity/SwampScan/issues)
+2. Run `swampscan --check-installation` and include output
+3. Include relevant log files
+4. Specify your operating system and version
 
-# Reinitialize
-sudo gvm-setup
+## Quick Fix Summary
 
-# Start services
-sudo gvm-start
-```
-
-### Database Recovery
-```bash
-# Backup existing database
-sudo -u postgres pg_dump gvmd > gvmd_backup.sql
-
-# Drop and recreate
-sudo -u postgres dropdb gvmd
-sudo -u postgres createdb gvmd
-sudo -u postgres psql gvmd -c "create extension \"uuid-ossp\";"
-sudo -u postgres psql gvmd -c "create extension \"pgcrypto\";"
-
-# Initialize GVM
-sudo -u _gvm gvmd --create-user=admin --password=admin
-```
-
-### Feed Refresh
-```bash
-# Force feed update
-sudo -u _gvm greenbone-nvt-sync --rsync
-sudo -u _gvm greenbone-feed-sync --type SCAP --rsync  
-sudo -u _gvm greenbone-feed-sync --type CERT --rsync
-
-# Check feed status
-sudo -u _gvm gvm-check-setup
-```
-
-## 📞 Getting Help
-
-### Log Collection
-When reporting issues, please include:
+For most common issues, try this sequence:
 
 ```bash
-# System information
-uname -a
-lsb_release -a
+# 1. Fix package manager if needed
+sudo dpkg --configure -a
+sudo apt-get update
+sudo apt-get -f install
 
-# SwampScan version
-swampscan --version
+# 2. Install missing dependencies
+sudo apt-get install -y cmake libglib2.0-dev libjson-glib-dev libpcap-dev \
+  libgcrypt-dev libgpgme-dev libssh-dev libksba-dev libgnutls28-dev \
+  libcurl4-gnutls-dev pkg-config gcc make
 
-# Installation status
+# 3. Fix permissions
+sudo chown -R gvm:gvm /var/lib/gvm /var/lib/openvas /var/log/gvm
+
+# 4. Restart services
+sudo systemctl restart postgresql redis-server
+
+# 5. Start OpenVAS daemon
+/home/ubuntu/.cargo/bin/openvasd --listening 127.0.0.1:3000 &
+
+# 6. Sync feeds
+sudo -u gvm greenbone-nvt-sync
+
+# 7. Test installation
 swampscan --check-installation
-
-# Service status
-sudo systemctl status redis-server gvmd ospd-openvas --no-pager
-
-# Recent logs
-sudo journalctl -u gvmd --no-pager -n 50
-sudo journalctl -u ospd-openvas --no-pager -n 50
 ```
 
-### Common Environment Info
-```bash
-# Python environment
-python3 --version
-pip3 list | grep -E "(gvm|openvas)"
-
-# OpenVAS components
-which openvas gvmd gvm-cli
-/usr/sbin/openvas --version
-gvmd --version
-```
-
-### Support Resources
-- **GitHub Issues**: Report bugs and feature requests
-- **Documentation**: Check the latest docs for updates
-- **Community**: Join discussions for community support
-
-## ✅ Verification Steps
-
-After applying fixes, verify everything works:
-
-```bash
-# 1. Check installation
-swampscan --check-installation
-# Should show: "✅ System is ready for vulnerability scanning!"
-
-# 2. Test basic scan
-swampscan 127.0.0.1 -p 22 -o test_scan.csv
-
-# 3. Verify output
-cat test_scan.csv
-# Should contain vulnerability findings
-
-# 4. Test external scan
-swampscan google.com -p 80,443 -o external_test.csv
-```
-
-If all steps complete successfully, SwampScan is properly configured and ready for use.
+This should resolve most installation and configuration issues.
 
