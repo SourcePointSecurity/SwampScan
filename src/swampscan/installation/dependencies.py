@@ -61,7 +61,8 @@ class DependencyManager:
             check_command="gcc --version",
             package_names={
                 "debian": "gcc",
-                "ubuntu": "gcc", 
+                "ubuntu": "gcc",
+                "kali": "gcc",
                 "centos": "gcc",
                 "rhel": "gcc",
                 "fedora": "gcc"
@@ -77,6 +78,7 @@ class DependencyManager:
             package_names={
                 "debian": "cmake",
                 "ubuntu": "cmake",
+                "kali": "cmake",
                 "centos": "cmake",
                 "rhel": "cmake", 
                 "fedora": "cmake"
@@ -91,6 +93,7 @@ class DependencyManager:
             package_names={
                 "debian": "make",
                 "ubuntu": "make",
+                "kali": "make",
                 "centos": "make",
                 "rhel": "make",
                 "fedora": "make"
@@ -105,6 +108,7 @@ class DependencyManager:
             package_names={
                 "debian": "pkg-config",
                 "ubuntu": "pkg-config",
+                "kali": "pkg-config",
                 "centos": "pkgconfig",
                 "rhel": "pkgconfig",
                 "fedora": "pkgconfig"
@@ -119,6 +123,7 @@ class DependencyManager:
             package_names={
                 "debian": "git",
                 "ubuntu": "git",
+                "kali": "git",
                 "centos": "git",
                 "rhel": "git",
                 "fedora": "git"
@@ -133,6 +138,7 @@ class DependencyManager:
             package_names={
                 "debian": "curl",
                 "ubuntu": "curl",
+                "kali": "curl",
                 "centos": "curl",
                 "rhel": "curl",
                 "fedora": "curl"
@@ -147,6 +153,7 @@ class DependencyManager:
             package_names={
                 "debian": "redis-server",
                 "ubuntu": "redis-server",
+                "kali": "redis-server",
                 "centos": "redis",
                 "rhel": "redis",
                 "fedora": "redis"
@@ -166,6 +173,7 @@ class DependencyManager:
             package_names={
                 "debian": "libglib2.0-dev",
                 "ubuntu": "libglib2.0-dev",
+                "kali": "libglib2.0-dev",
                 "centos": "glib2-devel",
                 "rhel": "glib2-devel",
                 "fedora": "glib2-devel"
@@ -181,6 +189,7 @@ class DependencyManager:
             package_names={
                 "debian": "libjson-glib-dev",
                 "ubuntu": "libjson-glib-dev",
+                "kali": "libjson-glib-dev",
                 "centos": "json-glib-devel",
                 "rhel": "json-glib-devel",
                 "fedora": "json-glib-devel"
@@ -195,6 +204,7 @@ class DependencyManager:
             package_names={
                 "debian": "libpcap-dev",
                 "ubuntu": "libpcap-dev",
+                "kali": "libpcap-dev",
                 "centos": "libpcap-devel",
                 "rhel": "libpcap-devel",
                 "fedora": "libpcap-devel"
@@ -210,6 +220,7 @@ class DependencyManager:
             package_names={
                 "debian": "libgcrypt20-dev",
                 "ubuntu": "libgcrypt20-dev",
+                "kali": "libgcrypt20-dev",
                 "centos": "libgcrypt-devel",
                 "rhel": "libgcrypt-devel",
                 "fedora": "libgcrypt-devel"
@@ -225,6 +236,7 @@ class DependencyManager:
             package_names={
                 "debian": "libgpgme-dev",
                 "ubuntu": "libgpgme-dev",
+                "kali": "libgpgme-dev",
                 "centos": "gpgme-devel",
                 "rhel": "gpgme-devel",
                 "fedora": "gpgme-devel"
@@ -238,8 +250,9 @@ class DependencyManager:
             min_version="0.6.0",
             check_command="pkg-config --exists libssh",
             package_names={
-                "debian": "libssh-gcrypt-dev",
-                "ubuntu": "libssh-gcrypt-dev",
+                "debian": "libssh-dev",
+                "ubuntu": "libssh-dev", 
+                "kali": "libssh-dev",
                 "centos": "libssh-devel",
                 "rhel": "libssh-devel",
                 "fedora": "libssh-devel"
@@ -255,6 +268,7 @@ class DependencyManager:
             package_names={
                 "debian": "libksba-dev",
                 "ubuntu": "libksba-dev",
+                "kali": "libksba-dev",
                 "centos": "libksba-devel",
                 "rhel": "libksba-devel",
                 "fedora": "libksba-devel"
@@ -270,6 +284,7 @@ class DependencyManager:
             package_names={
                 "debian": "libgnutls28-dev",
                 "ubuntu": "libgnutls28-dev",
+                "kali": "libgnutls28-dev",
                 "centos": "gnutls-devel",
                 "rhel": "gnutls-devel",
                 "fedora": "gnutls-devel"
@@ -284,6 +299,7 @@ class DependencyManager:
             package_names={
                 "debian": "libcurl4-gnutls-dev",
                 "ubuntu": "libcurl4-gnutls-dev",
+                "kali": "libcurl4-gnutls-dev",
                 "centos": "libcurl-devel",
                 "rhel": "libcurl-devel",
                 "fedora": "libcurl-devel"
@@ -399,7 +415,7 @@ class DependencyManager:
             return None
         
         # Generate command based on distribution
-        if distro in ['debian', 'ubuntu']:
+        if distro in ['debian', 'ubuntu', 'kali']:
             return ['sudo', 'apt-get', 'install', '-y'] + packages
         elif distro in ['centos', 'rhel']:
             return ['sudo', 'yum', 'install', '-y'] + packages

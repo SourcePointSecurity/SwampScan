@@ -39,7 +39,7 @@ class OpenVASInstaller:
     # System package mappings for different distributions
     DEBIAN_PACKAGES = {
         'system-deps': [
-            'gcc', 'pkg-config', 'libssh-gcrypt-dev', 'libgnutls28-dev',
+            'gcc', 'pkg-config', 'libssh-dev', 'libgnutls28-dev',
             'libglib2.0-dev', 'libjson-glib-dev', 'libpcap-dev', 'libgpgme-dev',
             'bison', 'libksba-dev', 'libsnmp-dev', 'libgcrypt20-dev', 
             'redis-server', 'libbsd-dev', 'libcurl4-gnutls-dev', 'krb5-multidev',
@@ -51,6 +51,7 @@ class OpenVASInstaller:
     }
     
     UBUNTU_PACKAGES = DEBIAN_PACKAGES  # Ubuntu uses same packages as Debian
+    KALI_PACKAGES = DEBIAN_PACKAGES    # Kali uses same packages as Debian
     
     CENTOS_PACKAGES = {
         'system-deps': [
@@ -386,7 +387,9 @@ class OpenVASInstaller:
             if os.path.exists('/etc/os-release'):
                 with open('/etc/os-release', 'r') as f:
                     content = f.read()
-                    if 'ubuntu' in content.lower():
+                    if 'kali' in content.lower():
+                        return 'kali'
+                    elif 'ubuntu' in content.lower():
                         return 'ubuntu'
                     elif 'debian' in content.lower():
                         return 'debian'
@@ -404,7 +407,7 @@ class OpenVASInstaller:
                 if shutil.which('apt-get'):
                     return 'debian'  # Assume Debian-based
                 elif shutil.which('yum') or shutil.which('dnf'):
-                    return 'centos'  # Assume RHEL-based
+                    return 'centos'  # Assume RedHat-based
             
             return None
             
@@ -414,7 +417,7 @@ class OpenVASInstaller:
     
     def _get_packages_for_distro(self, distro: str) -> List[str]:
         """Get the package list for a specific distribution."""
-        if distro in ['debian', 'ubuntu']:
+        if distro in ['debian', 'ubuntu', 'kali']:
             return self.DEBIAN_PACKAGES['system-deps']
         elif distro in ['centos', 'rhel', 'fedora']:
             return self.CENTOS_PACKAGES['system-deps']
