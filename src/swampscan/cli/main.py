@@ -1,7 +1,8 @@
 """
 Main CLI Entry Point
 
-This module provides the main command-line interface for the OpenVAS CLI scanner.
+This module provides the main command-line interface for SwampScan.
+Now supports both OpenVAS integration and standalone signature-based scanning.
 """
 
 import sys
@@ -15,6 +16,7 @@ try:
     from .parser import create_parser
     from ..utils.logging import setup_logging, get_logger, log_scan_start, log_scan_complete
     from ..scanner.manager import ScannerManager, ScanRequest
+    from ..scanner.signature_scanner import SignatureScanner
     from ..installation import (
         setup_openvas, 
         check_openvas_status, 
@@ -32,6 +34,7 @@ except ImportError:
     from swampscan.cli.parser import create_parser
     from swampscan.utils.logging import setup_logging, get_logger, log_scan_start, log_scan_complete
     from swampscan.scanner.manager import ScannerManager, ScanRequest
+    from swampscan.scanner.signature_scanner import SignatureScanner
     from swampscan.installation import (
         setup_openvas, 
         check_openvas_status, 
@@ -86,11 +89,11 @@ class CLIApplication:
             if parsed_args.install:
                 return self._handle_installation(parsed_args)
             
-            # Ensure OpenVAS is available before scanning
-            if not self._check_openvas_availability():
-                return 1
+            # Check for signature download request
+            if hasattr(parsed_args, 'download_signatures') and parsed_args.download_signatures:
+                return self._handle_signature_download(parsed_args)
             
-            # Execute scan
+            # Execute scan (signature-based by default, OpenVAS if available)
             return self._handle_scan(parsed_args)
             
         except KeyboardInterrupt:
@@ -170,6 +173,110 @@ class CLIApplication:
             return False
     
     def _handle_scan(self, args) -> int:
+        """Handle vulnerability scanning with signature-based approach."""
+        try:
+            # Determine scanning method
+            use_openvas = hasattr(args, 'use_openvas') and args.use_openvas
+            signature_dir = getattr(args, 'signature_dir', '/var/lib/openvas/plugins')
+            
+            if use_openvas and self._check_openvas_availability():
+                return self._handle_openvas_scan(args)
+            else:
+                return self._handle_signature_scan(args, signature_dir)
+                
+        except Exception as e:
+            self.logger.error(f"Scan failed: {e}")
+            print(f"❌ Scan failed: {e}")
+            return 1
+    
+    def _handle_signature_scan(self, args, signature_dir: str) -> int:
+        """Handle signature-based vulnerability scanning."""
+        print("🛡️  SwampScan - Signature-Based Vulnerability Scanner")
+        print("=" * 55)
+        
+        # Initialize signature scanner
+        scanner = SignatureScanner(signature_dir)
+        
+        # Load signatures
+        max_signatures = getattr(args, 'max_signatures', 1000)
+        print("🔄 Loading vulnerability signatures...")
+        loaded = scanner.load_signatures(max_signatures=max_signatures)
+        
+        if loaded == 0:
+            print("❌ No vulnerability signatures found!")
+            print(f"   Signature directory: {signature_dir}")
+            print("   Try downloading signatures with: swampscan --download-signatures")
+            return 1
+        
+        print(f"✅ Loaded {loaded} vulnerability signatures")
+        
+        # Parse targets and ports
+        targets = args.targets if hasattr(args, 'targets') else []
+        if hasattr(args, 'targets_file') and args.targets_file:
+            with open(args.targets_file, 'r') as f:
+                targets.extend([line.strip() for line in f if line.strip()])
+        
+        if not targets:
+            print("❌ No targets specified")
+            return 1
+        
+        # Parse ports
+        ports = self._parse_ports(getattr(args, 'ports', '22,80,443,8080,8443'))
+        
+        # Scan each target
+        all_results = {}
+        total_vulnerabilities = 0
+        
+        for target in targets:
+            print(f"\n🎯 Scanning {target}...")
+            start_time = time.time()
+            
+            results = scanner.scan_target(target, ports)
+            scan_time = time.time() - start_time
+            
+            all_results[target] = {
+                "scan_time": scan_time,
+                "vulnerabilities": results,
+                "vulnerability_count": len(results)
+            }
+            
+            total_vulnerabilities += len(results)
+            print(f"   Completed in {scan_time:.2f} seconds")
+            print(f"   Found {len(results)} potential vulnerabilities")
+        
+        # Generate report
+        report = {
+            "scan_info": {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "targets": targets,
+                "ports": ports,
+                "signatures_loaded": loaded,
+                "scanner": "SwampScan Signature-Based"
+            },
+            "results": all_results,
+            "summary": {
+                "total_targets": len(targets),
+                "total_vulnerabilities": total_vulnerabilities,
+                "scan_duration": sum(data["scan_time"] for data in all_results.values())
+            }
+        }
+        
+        # Output results
+        output_file = getattr(args, 'output', None)
+        output_format = getattr(args, 'format', 'txt')
+        
+        if output_file:
+            self._save_signature_results(report, output_format, output_file)
+            print(f"\n📄 Results saved to: {output_file}")
+        else:
+            self._print_signature_results(report, output_format)
+        
+        print(f"\n✅ Scan completed successfully!")
+        print(f"📊 Summary: {len(targets)} targets, {total_vulnerabilities} vulnerabilities found")
+        
+        return 0
+    
+    def _handle_openvas_scan(self, args) -> int:
         """Handle vulnerability scanning."""
         try:
             # Create scan request
@@ -289,6 +396,176 @@ class CLIApplication:
                 print(f"  {vuln.target}:{vuln.port} - {vuln.name} ({vuln.severity})")
             if len(result.vulnerabilities) > 10:
                 print(f"  ... and {len(result.vulnerabilities) - 10} more")
+    
+    def _parse_ports(self, port_string: str) -> List[int]:
+        """Parse port specification string."""
+        ports = []
+        
+        for part in port_string.split(','):
+            part = part.strip()
+            
+            if '-' in part:
+                # Port range
+                start, end = part.split('-', 1)
+                try:
+                    start_port = int(start.strip())
+                    end_port = int(end.strip())
+                    ports.extend(range(start_port, end_port + 1))
+                except ValueError:
+                    self.logger.warning(f"Invalid port range '{part}'")
+            else:
+                # Single port
+                try:
+                    port = int(part)
+                    if 1 <= port <= 65535:
+                        ports.append(port)
+                    else:
+                        self.logger.warning(f"Port {port} out of range")
+                except ValueError:
+                    self.logger.warning(f"Invalid port '{part}'")
+        
+        return sorted(list(set(ports)))  # Remove duplicates and sort
+    
+    def _save_signature_results(self, report: dict, format_type: str, output_file: str):
+        """Save signature scan results to file."""
+        import json
+        import csv
+        from pathlib import Path
+        
+        output_path = Path(output_file)
+        
+        if format_type.lower() == "json":
+            with open(output_path, 'w') as f:
+                json.dump(report, f, indent=2, default=str)
+        
+        elif format_type.lower() == "txt":
+            with open(output_path, 'w') as f:
+                self._write_text_report(report, f)
+        
+        elif format_type.lower() == "csv":
+            self._write_csv_report(report, output_path)
+    
+    def _print_signature_results(self, report: dict, format_type: str):
+        """Print signature scan results to console."""
+        import json
+        import sys
+        
+        if format_type.lower() == "json":
+            print(json.dumps(report, indent=2, default=str))
+        else:
+            self._write_text_report(report, sys.stdout)
+    
+    def _write_text_report(self, report: dict, file_obj):
+        """Write text format report."""
+        file_obj.write("SwampScan - Vulnerability Scan Report\\n")
+        file_obj.write("=" * 50 + "\\n\\n")
+        
+        # Scan info
+        scan_info = report["scan_info"]
+        file_obj.write(f"Scan Date: {scan_info['timestamp']}\\n")
+        file_obj.write(f"Targets: {', '.join(scan_info['targets'])}\\n")
+        file_obj.write(f"Ports: {', '.join(map(str, scan_info['ports']))}\\n")
+        file_obj.write(f"Signatures Loaded: {scan_info['signatures_loaded']}\\n\\n")
+        
+        # Results for each target
+        for target, target_data in report["results"].items():
+            file_obj.write(f"Target: {target}\\n")
+            file_obj.write("-" * 30 + "\\n")
+            file_obj.write(f"Scan Time: {target_data['scan_time']:.2f} seconds\\n")
+            file_obj.write(f"Vulnerabilities Found: {target_data['vulnerability_count']}\\n\\n")
+            
+            if target_data["vulnerabilities"]:
+                for vuln in target_data["vulnerabilities"]:
+                    file_obj.write(f"  Port {vuln.port}: {vuln.vulnerability_name}\\n")
+                    file_obj.write(f"    Severity: {vuln.severity} (CVSS: {vuln.cvss_score})\\n")
+                    file_obj.write(f"    Description: {vuln.description[:100]}...\\n")
+                    if vuln.cve_ids:
+                        file_obj.write(f"    CVEs: {', '.join(vuln.cve_ids)}\\n")
+                    file_obj.write(f"    Solution: {vuln.solution[:100]}...\\n\\n")
+            else:
+                file_obj.write("  No vulnerabilities detected\\n\\n")
+    
+    def _write_csv_report(self, report: dict, output_path: Path):
+        """Write CSV format report."""
+        import csv
+        
+        with open(output_path, 'w', newline='') as csvfile:
+            fieldnames = [
+                'target', 'port', 'protocol', 'vulnerability_name', 
+                'severity', 'cvss_score', 'description', 'solution', 'cve_ids'
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for target, target_data in report["results"].items():
+                for vuln in target_data["vulnerabilities"]:
+                    row = {
+                        'target': vuln.target,
+                        'port': vuln.port,
+                        'protocol': vuln.protocol,
+                        'vulnerability_name': vuln.vulnerability_name,
+                        'severity': vuln.severity,
+                        'cvss_score': vuln.cvss_score,
+                        'description': vuln.description,
+                        'solution': vuln.solution,
+                        'cve_ids': ', '.join(vuln.cve_ids)
+                    }
+                    writer.writerow(row)
+    
+    def _handle_signature_download(self, args) -> int:
+        """Handle signature download request."""
+        print("📥 SwampScan Signature Downloader")
+        print("=" * 40)
+        
+        # Import the downloader
+        import sys
+        from pathlib import Path
+        
+        # Add the download script to path
+        script_dir = Path(__file__).parent.parent.parent.parent
+        sys.path.insert(0, str(script_dir))
+        
+        try:
+            from download_signatures import SignatureDownloader
+            
+            target_dir = getattr(args, 'signature_dir', './signatures')
+            source_dir = getattr(args, 'source_dir', '/var/lib/openvas/plugins')
+            method = getattr(args, 'download_method', 'all')
+            
+            downloader = SignatureDownloader(target_dir)
+            success = False
+            
+            if method in ["copy", "all"]:
+                print("\\n1. Trying to copy existing signatures...")
+                if downloader.copy_existing_signatures(source_dir):
+                    success = True
+                else:
+                    print("   No existing signatures found to copy")
+            
+            if method in ["download", "all"]:
+                print("\\n2. Trying to download from official feeds...")
+                if downloader.download_greenbone_community_feed():
+                    success = True
+                else:
+                    print("   Official feed download not available")
+            
+            if method in ["samples", "all"] or not success:
+                print("\\n3. Creating sample signatures...")
+                if downloader.download_sample_signatures():
+                    success = True
+            
+            if success:
+                print(f"\\n✅ Signatures are ready in: {target_dir}")
+                print(f"   Use with: swampscan --signature-dir {target_dir}")
+                return 0
+            else:
+                print("\\n❌ Failed to obtain any signatures")
+                return 1
+                
+        except ImportError as e:
+            print(f"❌ Failed to import signature downloader: {e}")
+            print("   Make sure download_signatures.py is available")
+            return 1
 
 
 def main(args: Optional[List[str]] = None) -> int:

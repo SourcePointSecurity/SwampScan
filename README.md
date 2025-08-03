@@ -21,22 +21,29 @@
 
 ## 🐊 About SwampScan
 
-SwampScan is a powerful Python command-line vulnerability scanner that integrates seamlessly with OpenVAS to provide comprehensive network security assessments. Like a predator lurking in the digital swamp, SwampScan silently hunts for security vulnerabilities across your infrastructure with precision and stealth.
+SwampScan is a powerful Python command-line vulnerability scanner that provides comprehensive network security assessments using **signature-based detection**. Like a predator lurking in the digital swamp, SwampScan silently hunts for security vulnerabilities across your infrastructure with precision and stealth.
 
-Built by security professionals for security professionals, SwampScan combines the robust scanning capabilities of OpenVAS with an intuitive command-line interface, automatic installation management, and flexible output formatting. Whether you're conducting penetration tests, compliance audits, or routine security assessments, SwampScan adapts to your workflow.
+Built by security professionals for security professionals, SwampScan combines **lightweight signature-based scanning** with an intuitive command-line interface, automatic signature management, and flexible output formatting. **OpenVAS integration is optional** - SwampScan works out-of-the-box with downloaded vulnerability signatures. Whether you're conducting penetration tests, compliance audits, or routine security assessments, SwampScan adapts to your workflow.
 
-### ✅ **Ubuntu 22.04 LTS Fully Supported**
+### ✅ **Simple Installation - No OpenVAS Required**
 
-SwampScan now includes **complete Ubuntu compatibility** with enhanced OpenVAS/GVM integration. All installation and configuration issues have been resolved for seamless operation on Ubuntu systems.
+SwampScan now features **signature-based scanning by default** - just install Python dependencies and download vulnerability signatures. **No complex OpenVAS setup required!** OpenVAS integration remains available as an optional advanced feature.
 
 ### 🎯 Key Features
 
-**🔍 Comprehensive Scanning**
-- ✅ **Ubuntu OpenVAS Integration** - Full compatibility with package-based OpenVAS installations
-- ✅ **Enhanced Validation Logic** - Improved system detection and compatibility checking
+**🔍 Signature-Based Scanning (Default)**
+- ✅ **No OpenVAS Required** - Works with downloaded NASL signature files
+- ✅ **Simple Installation** - Python dependencies only (5-minute setup)
+- ✅ **Automatic Signature Management** - Download and update vulnerability signatures
 - Support for single hosts, network ranges, and target files
 - Flexible port specification with predefined service groups
 - Real-time progress tracking and detailed logging
+
+**🛡️ Optional OpenVAS Integration**
+- ✅ **Ubuntu OpenVAS Integration** - Full compatibility when OpenVAS is desired
+- ✅ **Enhanced Validation Logic** - Improved system detection and compatibility checking
+- Use `--use-openvas` flag to enable full OpenVAS backend
+- Automatic fallback to signature-based scanning
 
 **📊 Flexible Output**
 - CSV format for spreadsheet analysis
@@ -60,52 +67,59 @@ SwampScan now includes **complete Ubuntu compatibility** with enhanced OpenVAS/G
 
 ## 🚀 Quick Start
 
-Get SwampScan running on Ubuntu in under 5 minutes:
+Get SwampScan running with signature-based scanning in under 5 minutes:
 
 ```bash
 # Clone the repository
 git clone https://github.com/SourcePointSecurity/SwampScan.git
 cd SwampScan
 
-# Run the enhanced Ubuntu installation script
-./scripts/install_swampscan.sh
+# Simple installation (signature-based scanning)
+./scripts/install_swampscan_simple.sh
 
-# Verify installation
-swampscan --check-installation
+# Download vulnerability signatures
+swampscan --download-signatures
 
 # Run your first scan
-swampscan google.com -p web -o results.csv
+swampscan scanme.nmap.org -p 22,80,443 -o results.json -f json
 ```
 
-### 🎯 **Verified Functionality**
+### 🎯 **Two Installation Options**
 
-SwampScan has been comprehensively tested and validated:
+**Option 1: Simple Installation (Recommended)**
+- ✅ **5-minute setup** - Python dependencies only
+- ✅ **No OpenVAS required** - Signature-based scanning
+- ✅ **Works everywhere** - Any system with Python 3.7+
 
-- ✅ **External Website Scanning**: Successfully tested on sourcepointsecurity.com, google.com, github.com
-- ✅ **Internal Network Assessment**: Comprehensive scanning of internal IP ranges
-- ✅ **All-Ports Analysis**: Complete port coverage (1-65535) with excellent performance
-- ✅ **Multi-Target Processing**: Batch scanning capabilities for enterprise use
-- ✅ **Professional Reporting**: Structured CSV output with detailed vulnerability data
+**Option 2: Full Installation (Advanced)**
+- ✅ **Complete OpenVAS integration** - Full vulnerability assessment
+- ✅ **Enterprise features** - Advanced scanning capabilities
+- ✅ **Ubuntu optimized** - Enhanced compatibility
 
 ### 📋 Quick Start Guide
 
-**Step 1: Enhanced Installation**
+**Simple Installation (Signature-Based)**
+```bash
+git clone https://github.com/SourcePointSecurity/SwampScan.git
+cd SwampScan
+./scripts/install_swampscan_simple.sh
+
+# Download signatures and scan
+swampscan --download-signatures --download-method samples
+swampscan scanme.nmap.org -p web -o results.csv
+```
+
+**Full Installation (OpenVAS Integration)**
 ```bash
 git clone https://github.com/SourcePointSecurity/SwampScan.git
 cd SwampScan
 ./scripts/install_swampscan.sh
-```
 
-**Step 2: Verification**
-```bash
+# Verify OpenVAS installation
 swampscan --check-installation
-# Should show: "✅ System is ready for vulnerability scanning!"
-```
 
-**Step 3: First Scan**
-```bash
-swampscan 127.0.0.1 -p ssh,http -o results.csv
-cat results.csv
+# Use OpenVAS backend
+swampscan scanme.nmap.org --use-openvas -p web -o results.csv
 ```
 
 ### 🖥️ Sample Output Preview

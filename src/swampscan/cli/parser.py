@@ -22,8 +22,8 @@ class ScannerArgumentParser:
     def _create_parser(self) -> argparse.ArgumentParser:
         """Create and configure the argument parser."""
         parser = argparse.ArgumentParser(
-            prog='openvas-cli-scanner',
-            description='OpenVAS CLI Vulnerability Scanner - A Python interface to OpenVAS',
+            prog='swampscan',
+            description='SwampScan - Vulnerability Scanner with Signature-Based Detection (OpenVAS Optional)',
             epilog=self._get_examples(),
             formatter_class=argparse.RawDescriptionHelpFormatter
         )
@@ -74,7 +74,7 @@ class ScannerArgumentParser:
         )
         output_group.add_argument(
             '-F', '--format',
-            choices=['csv', 'txt'],
+            choices=['csv', 'txt', 'json'],
             default='csv',
             help='Output format (default: csv)'
         )
@@ -107,6 +107,11 @@ class ScannerArgumentParser:
         # OpenVAS options
         openvas_group = parser.add_argument_group('OpenVAS Options')
         openvas_group.add_argument(
+            '--use-openvas',
+            action='store_true',
+            help='Force use of OpenVAS backend (requires OpenVAS installation)'
+        )
+        openvas_group.add_argument(
             '--method',
             choices=['auto', 'http', 'binary'],
             default='auto',
@@ -122,6 +127,38 @@ class ScannerArgumentParser:
             '--api-key',
             type=str,
             help='API key for OpenVAS authentication'
+        )
+        
+        # Signature-based scanning options
+        signature_group = parser.add_argument_group('Signature-Based Scanning (Default)')
+        signature_group.add_argument(
+            '--signature-dir',
+            type=str,
+            default='/var/lib/openvas/plugins',
+            help='Directory containing NASL signature files (default: /var/lib/openvas/plugins)'
+        )
+        signature_group.add_argument(
+            '--max-signatures',
+            type=int,
+            default=1000,
+            help='Maximum number of signatures to load (default: 1000)'
+        )
+        signature_group.add_argument(
+            '--download-signatures',
+            action='store_true',
+            help='Download vulnerability signatures before scanning'
+        )
+        signature_group.add_argument(
+            '--download-method',
+            choices=['copy', 'download', 'samples', 'all'],
+            default='all',
+            help='Signature download method (default: all)'
+        )
+        signature_group.add_argument(
+            '--source-dir',
+            type=str,
+            default='/var/lib/openvas/plugins',
+            help='Source directory for copying existing signatures'
         )
         
         # Installation options
@@ -190,29 +227,44 @@ class ScannerArgumentParser:
         """Get usage examples for the help text."""
         return '''
 Examples:
-  # Scan a single host
-  openvas-cli-scanner 192.168.1.1
+  # Basic signature-based scanning (default)
+  swampscan 192.168.1.1
+  swampscan scanme.nmap.org -p 22,80,443
   
-  # Scan multiple hosts with specific ports
-  openvas-cli-scanner 192.168.1.1 192.168.1.2 -p 22,80,443
+  # Download signatures first, then scan
+  swampscan --download-signatures --download-method samples
+  swampscan 192.168.1.1 --signature-dir ./signatures
   
-  # Scan a network range
-  openvas-cli-scanner 192.168.1.0/24 -p web
+  # Scan multiple hosts with custom signatures
+  swampscan 192.168.1.1 192.168.1.2 --signature-dir ./custom_sigs --max-signatures 500
+  
+  # Scan a network range with output
+  swampscan 192.168.1.0/24 -p web -o results.json -f json
   
   # Scan targets from file
-  openvas-cli-scanner -f targets.txt -p all -o results.csv
+  swampscan -f targets.txt -p all -o report.csv -f csv
   
-  # Scan with custom output format
-  openvas-cli-scanner example.com -p ssh,web -F txt -o report.txt
+  # Force OpenVAS backend (requires OpenVAS installation)
+  swampscan example.com --use-openvas -p ssh,web -F txt -o report.txt
   
   # Check installation status
-  openvas-cli-scanner --check-installation
+  swampscan --check-installation
   
-  # Install missing components
-  openvas-cli-scanner --install
+  # Install missing components (OpenVAS)
+  swampscan --install
   
   # List available service groups
-  openvas-cli-scanner --list-services
+  swampscan --list-services
+
+Signature Management:
+  # Download sample signatures
+  swampscan --download-signatures --download-method samples
+  
+  # Copy existing OpenVAS signatures
+  swampscan --download-signatures --download-method copy
+  
+  # Try all signature sources
+  swampscan --download-signatures --download-method all
 
 Available service groups:
   web, ssh, ftp, telnet, smtp, dns, http, https, pop3, imap,
@@ -248,7 +300,7 @@ Available service groups:
             self.parser.error("Cannot use --all-ports with --ports")
         
         # Check target specification
-        if not args.check_installation and not args.install and not args.list_services and not args.list_dependencies:
+        if not args.check_installation and not args.install and not args.list_services and not args.list_dependencies and not args.download_signatures:
             if not args.targets and not args.targets_file:
                 self.parser.error("No targets specified. Use targets or --targets-file")
         
